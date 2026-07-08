@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CET-4 多词库智能背单词</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-top: 0;
+            font-size: 24px;
+        }
+
+        /* 多词库导入区域 */
+        .file-selector {
+            text-align: center;
+            background: #fff9db;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px dashed #fab005;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .file-selector input {
+            margin-top: 8px;
+        }
+
+        /* 单词卡片样式 */
+        .word-card {
+            text-align: center;
+            margin: 30px 0;
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .word-text {
+            font-size: 42px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #1a1a1a;
+        }
+
+        .word-phonetic {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 15px;
+            background: #eee;
+            padding: 2px 10px;
+            border-radius: 20px;
+        }
+
+        .word-translation {
+            font-size: 20px;
+            color: #2c3e50;
+            font-weight: 500;
+            padding: 0 10px;
+            line-height: 1.4;
+        }
+
+        .hidden {
+            visibility: hidden;
+        }
+
+        /* 控制面板样式 */
+        .control-panel {
+            background: #f9fbff;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #e1e8ed;
+        }
+
+        .control-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .control-item {
+            display: flex;
+            align-items: center;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .control-item input, .control-item select {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .control-item select {
+            width: auto;
+            height: auto;
+            padding: 2px 5px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        /* 按钮样式 */
+        .btn-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #357abd;
+        }
+
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background-color: #cbd5e1;
+        }
+
+        .progress-info {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-top: 15px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📝 多词库混编背单词系统</h1>
+    
+    <div class="file-selector">
+        <strong>第一步：</strong> 导入 JSON 文件（支持**多选**多个字母的词库）：<br>
+        <input type="file" id="fileInput" accept=".json" multiple>
+    </div>
+
+    <div class="word-card">
+        <div id="wordText" class="word-text">等待词库导入...</div>
+        <div id="wordPhonetic" class="word-phonetic">[/.../]</div>
+        <div id="wordTranslation" class="word-translation">请在上方选择单张或多张 JSON 词库文件</div>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <label class="control-item">
+                <input type="checkbox" id="showPhonetic" checked> 显示音标
+            </label>
+            <label class="control-item">
+                <input type="checkbox" id="showTranslation" checked> 显示中文译文
+            </label>
+            <label class="control-item">
+                <input type="checkbox" id="speakWord" checked> 朗读英文单词
+            </label>
+            <label class="control-item">
+                <input type="checkbox" id="speakTranslation" checked> 朗读中文译文
+            </label>
+            
+            <label class="control-item">
+                <span style="margin-right: 5px;">播放模式：</span>
+                <select id="playMode">
+                    <option value="sequence">顺序播放</option>
+                    <option value="random" selected>随机播放</option>
+                </select>
+            </label>
+
+            <label class="control-item">
+                <span style="margin-right: 5px;">单词重复：</span>
+                <select id="repeatCount">
+                    <option value="1" selected>1 次</option>
+                    <option value="2">2 次</option>
+                    <option value="3">3 次</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-secondary" id="prevBtn" disabled>上一个</button>
+            <button class="btn btn-primary" id="nextBtn" disabled>下一个</button>
+        </div>
+        
+        <div id="progress" class="progress-info">尚未载入词库数据</div>
+    </div>
+</div>
+
+<script>
+    let rawVocabulary = []; 
+    let vocabulary = [];    
+    let currentIndex = 0;
+    const synth = window.speechSynthesis;
+
+    // DOM 引用
+    const fileInput = document.getElementById('fileInput');
+    const wordText = document.getElementById('wordText');
+    const wordPhonetic = document.getElementById('wordPhonetic');
+    const wordTranslation = document.getElementById('wordTranslation');
+    const progressText = document.getElementById('progress');
+    
+    const showPhoneticCheck = document.getElementById('showPhonetic');
+    const showTranslationCheck = document.getElementById('showTranslation');
+    const speakWordCheck = document.getElementById('speakWord');
+    const speakTranslationCheck = document.getElementById('speakTranslation');
+    const playModeSelect = document.getElementById('playMode');
+    const repeatCountSelect = document.getElementById('repeatCount');
+
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    // 监听多选文件
+    fileInput.addEventListener('change', async function(e) {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        rawVocabulary = []; 
+        progressText.innerText = `正在读取 ${files.length} 个文件...`;
+
+        const readPromises = Array.from(files).map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        const mappedData = data.map(item => ({
+                            word: item.word || '未知单词',
+                            phonetic: item.phonetic_symbol ? (item.phonetic_symbol.startsWith('[') ? item.phonetic_symbol : `[${item.phonetic_symbol}]`) : '[/ /]',
+                            translation: item.mean || '暂无释义'
+                        }));
+                        resolve(mappedData);
+                    } catch (err) {
+                        reject(`文件 [${file.name}] 解析 JSON 失败`);
+                    }
+                };
+                reader.onerror = () => reject(`文件 [${file.name}] 读取错误`);
+                reader.readAsText(file);
+            });
+        });
+
+        try {
+            const results = await Promise.all(readPromises);
+            results.forEach(wordsArray => {
+                rawVocabulary = rawVocabulary.concat(wordsArray);
+            });
+
+            if (rawVocabulary.length === 0) {
+                alert('所有选中的文件中均未找到有效单词数据！');
+                return;
+            }
+
+            prevBtn.disabled = false;
+            nextBtn.disabled = false;
+            initPlayQueue();
+        } catch (err) {
+            alert(err);
+            progressText.innerText = "导入失败，请检查文件格式";
+        }
+    });
+
+    // 初始化/重置队列
+    function initPlayQueue() {
+        if (rawVocabulary.length === 0) return;
+
+        const mode = playModeSelect.value;
+        if (mode === 'random') {
+            vocabulary = [...rawVocabulary];
+            for (let i = vocabulary.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [vocabulary[i], vocabulary[j]] = [vocabulary[j], vocabulary[i]];
+            }
+        } else {
+            vocabulary = [...rawVocabulary];
+        }
+
+        currentIndex = 0;
+        updateCard();
+    }
+
+    // 刷新页面卡片
+    function updateCard() {
+        if (vocabulary.length === 0) return;
+        synth.cancel(); // 强行切断上一题的声音
+
+        const currentWord = vocabulary[currentIndex];
+        
+        wordText.innerText = currentWord.word;
+        wordPhonetic.innerText = currentWord.phonetic;
+        wordTranslation.innerText = currentWord.translation;
+
+        wordPhonetic.classList.toggle('hidden', !showPhoneticCheck.checked);
+        wordTranslation.classList.toggle('hidden', !showTranslationCheck.checked);
+
+        const modeLabel = playModeSelect.value === 'random' ? '随机播放' : '顺序播放';
+        progressText.innerText = `成功合并 ${fileInput.files.length} 个词库，共 ${vocabulary.length} 个单词<br>[${modeLabel}] 当前进度：第 ${currentIndex + 1} 个`;
+
+        handleAudioFlow(currentWord);
+    }
+
+    // 发音管道控制
+    function handleAudioFlow(currentWord) {
+        const shouldSpeakWord = speakWordCheck.checked;
+        const shouldSpeakTranslation = speakTranslationCheck.checked;
+
+        if (!shouldSpeakWord && !shouldSpeakTranslation) return; 
+
+        // 获取用户设置的重复发音次数
+        const maxRepeats = parseInt(repeatCountSelect.value, 10);
+        let currentRepeat = 0;
+
+        // 构造英文发音对象
+        const wordUtterance = new SpeechSynthesisUtterance(currentWord.word);
+        wordUtterance.lang = 'en-US';
+        wordUtterance.rate = 0.9;
+
+        // 构造中文发音对象
+        const cleanTranslation = currentWord.translation.replace(/[a-z]+\.\s*/g, '').replace(/[，、；]/g, '，');
+        const transUtterance = new SpeechSynthesisUtterance(cleanTranslation);
+        transUtterance.lang = 'zh-CN';
+
+        // 核心：中文朗读完毕后，触发自动切换下一个
+        transUtterance.onend = () => {
+            if (speakTranslationCheck.checked) {
+                setTimeout(nextWord, 800); 
+            }
+        };
+
+        // 核心：英文朗读完毕后的回调逻辑（用于控制重复次数）
+        wordUtterance.onend = () => {
+            currentRepeat++;
+            if (currentRepeat < maxRepeats) {
+                // 如果还没达到重复次数，继续朗读英文
+                synth.speak(wordUtterance);
+            } else {
+                // 英文重复读完后，如果勾选了读中文，则开始读中文
+                if (shouldSpeakTranslation) {
+                    synth.speak(transUtterance);
+                }
+            }
+        };
+
+        // 开始执行发音流程
+        if (shouldSpeakWord) {
+            synth.speak(wordUtterance); // 从第一遍英文开始
+        } else if (shouldSpeakTranslation) {
+            synth.speak(transUtterance); // 如果关闭了英文朗读，直接读中文
+        }
+    }
+
+    function nextWord() {
+        if (currentIndex < vocabulary.length - 1) {
+            currentIndex++;
+            updateCard();
+        } else {
+            alert('当前混编大词库已全部过完一遍！');
+            initPlayQueue(); 
+        }
+    }
+
+    function prevWord() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateCard();
+        }
+    }
+
+    // 绑定基础事件
+    nextBtn.addEventListener('click', nextWord);
+    prevBtn.addEventListener('click', prevWord);
+
+    showPhoneticCheck.addEventListener('change', () => wordPhonetic.classList.toggle('hidden', !showPhoneticCheck.checked));
+    showTranslationCheck.addEventListener('change', () => wordTranslation.classList.toggle('hidden', !showTranslationCheck.checked));
+    
+    // 控件状态改变时重新触发朗读
+    speakWordCheck.addEventListener('change', updateCard);
+    speakTranslationCheck.addEventListener('change', updateCard);
+    repeatCountSelect.addEventListener('change', updateCard);
+    playModeSelect.addEventListener('change', initPlayQueue);
+</script>
+
+</body>
+</html>
