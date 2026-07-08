@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 设置 Node.js 环境
-        uses: setup-node@v4
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
@@ -29,11 +29,9 @@ jobs:
           const path = require('path');
           
           let allWords = [];
-          // 读取根目录下所有文件
           const files = fs.readdirSync('.');
           
           files.forEach(file => {
-            // 过滤掉我们自己生成的合并文件，防止死循环；同时确保只读取以 .json 结尾的文件
             if (file.endsWith('.json') && file !== 'all_words.json' && file !== 'package.json') {
               try {
                 const content = JSON.parse(fs.readFileSync(file, 'utf8'));
