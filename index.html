@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CET-4 多词库智能背单词</title>
+    <title>CET-4 自动混编背单词系统</title>
     <style>
         :root {
             --primary-color: #4a90e2;
@@ -37,21 +37,6 @@
             color: var(--primary-color);
             margin-top: 0;
             font-size: 24px;
-        }
-
-        /* 多词库导入区域 */
-        .file-selector {
-            text-align: center;
-            background: #fff9db;
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px dashed #fab005;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .file-selector input {
-            margin-top: 8px;
         }
 
         /* 单词卡片样式 */
@@ -178,17 +163,12 @@
 <body>
 
 <div class="container">
-    <h1>📝 多词库混编背单词系统</h1>
-    
-    <div class="file-selector">
-        <strong>第一步：</strong> 导入 JSON 文件（支持**多选**多个字母的词库）：<br>
-        <input type="file" id="fileInput" accept=".json" multiple>
-    </div>
+    <h1>📝 多词库云端全自动背单词</h1>
 
     <div class="word-card">
-        <div id="wordText" class="word-text">等待词库导入...</div>
+        <div id="wordText" class="word-text">云端词库加载中...</div>
         <div id="wordPhonetic" class="word-phonetic">[/.../]</div>
-        <div id="wordTranslation" class="word-translation">请在上方选择单张或多张 JSON 词库文件</div>
+        <div id="wordTranslation" class="word-translation">正在同步云端多词库数据，请稍候</div>
     </div>
 
     <div class="control-panel">
@@ -229,7 +209,7 @@
             <button class="btn btn-primary" id="nextBtn" disabled>下一个</button>
         </div>
         
-        <div id="progress" class="progress-info">尚未载入词库数据</div>
+        <div id="progress" class="progress-info">初始化中...</div>
     </div>
 </div>
 
@@ -240,7 +220,6 @@
     const synth = window.speechSynthesis;
 
     // DOM 引用
-    const fileInput = document.getElementById('fileInput');
     const wordText = document.getElementById('wordText');
     const wordPhonetic = document.getElementById('wordPhonetic');
     const wordTranslation = document.getElementById('wordTranslation');
@@ -256,56 +235,40 @@
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
 
-    // 监听多选文件
-    fileInput.addEventListener('change', async function(e) {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-
-        rawVocabulary = []; 
-        progressText.innerText = `正在读取 ${files.length} 个文件...`;
-
-        const readPromises = Array.from(files).map(file => {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        const mappedData = data.map(item => ({
-                            word: item.word || '未知单词',
-                            phonetic: item.phonetic_symbol ? (item.phonetic_symbol.startsWith('[') ? item.phonetic_symbol : `[${item.phonetic_symbol}]`) : '[/ /]',
-                            translation: item.mean || '暂无释义'
-                        }));
-                        resolve(mappedData);
-                    } catch (err) {
-                        reject(`文件 [${file.name}] 解析 JSON 失败`);
-                    }
-                };
-                reader.onerror = () => reject(`文件 [${file.name}] 读取错误`);
-                reader.readAsText(file);
-            });
-        });
-
+    // 核心改动：页面加载时自动抓取同目录下的自动化合并文件 all_words.json
+    async function autoLoadCloudVocabulary() {
         try {
-            const results = await Promise.all(readPromises);
-            results.forEach(wordsArray => {
-                rawVocabulary = rawVocabulary.concat(wordsArray);
-            });
+            // 读取由 GitHub Action 自动生成的合并总词库
+            const response = await fetch('./all_words.json');
+            if (!response.ok) throw new Error('未找到合并词库文件，请等待 GitHub 自动化脚本执行完成。');
+            
+            const data = await response.json();
+            
+            // 适配格式
+            rawVocabulary = data.map(item => ({
+                word: item.word || '未知单词',
+                phonetic: item.phonetic_symbol ? (item.phonetic_symbol.startsWith('[') ? item.phonetic_symbol : `[${item.phonetic_symbol}]`) : '[/ /]',
+                translation: item.mean || '暂无释义'
+            }));
 
             if (rawVocabulary.length === 0) {
-                alert('所有选中的文件中均未找到有效单词数据！');
+                progressText.innerText = "词库内没有任何有效单词";
                 return;
             }
 
+            // 激活控制
             prevBtn.disabled = false;
             nextBtn.disabled = false;
             initPlayQueue();
-        } catch (err) {
-            alert(err);
-            progressText.innerText = "导入失败，请检查文件格式";
-        }
-    });
 
-    // 初始化/重置队列
+        } catch (err) {
+            console.error(err);
+            wordText.innerText = "加载失败";
+            wordTranslation.innerText = err.message;
+            progressText.innerText = "请检查仓库中是否包含 JSON 词库";
+        }
+    }
+
     function initPlayQueue() {
         if (rawVocabulary.length === 0) return;
 
@@ -324,10 +287,9 @@
         updateCard();
     }
 
-    // 刷新页面卡片
     function updateCard() {
         if (vocabulary.length === 0) return;
-        synth.cancel(); // 强行切断上一题的声音
+        synth.cancel(); 
 
         const currentWord = vocabulary[currentIndex];
         
@@ -339,58 +301,49 @@
         wordTranslation.classList.toggle('hidden', !showTranslationCheck.checked);
 
         const modeLabel = playModeSelect.value === 'random' ? '随机播放' : '顺序播放';
-        progressText.innerText = `成功合并 ${fileInput.files.length} 个词库，共 ${vocabulary.length} 个单词<br>[${modeLabel}] 当前进度：第 ${currentIndex + 1} 个`;
+        progressText.innerText = `云端全库共 ${vocabulary.length} 个单词 | [${modeLabel}] 当前：第 ${currentIndex + 1} 个`;
 
         handleAudioFlow(currentWord);
     }
 
-    // 发音管道控制
     function handleAudioFlow(currentWord) {
         const shouldSpeakWord = speakWordCheck.checked;
         const shouldSpeakTranslation = speakTranslationCheck.checked;
 
         if (!shouldSpeakWord && !shouldSpeakTranslation) return; 
 
-        // 获取用户设置的重复发音次数
         const maxRepeats = parseInt(repeatCountSelect.value, 10);
         let currentRepeat = 0;
 
-        // 构造英文发音对象
         const wordUtterance = new SpeechSynthesisUtterance(currentWord.word);
         wordUtterance.lang = 'en-US';
         wordUtterance.rate = 0.9;
 
-        // 构造中文发音对象
         const cleanTranslation = currentWord.translation.replace(/[a-z]+\.\s*/g, '').replace(/[，、；]/g, '，');
         const transUtterance = new SpeechSynthesisUtterance(cleanTranslation);
         transUtterance.lang = 'zh-CN';
 
-        // 核心：中文朗读完毕后，触发自动切换下一个
         transUtterance.onend = () => {
             if (speakTranslationCheck.checked) {
                 setTimeout(nextWord, 800); 
             }
         };
 
-        // 核心：英文朗读完毕后的回调逻辑（用于控制重复次数）
         wordUtterance.onend = () => {
             currentRepeat++;
             if (currentRepeat < maxRepeats) {
-                // 如果还没达到重复次数，继续朗读英文
                 synth.speak(wordUtterance);
             } else {
-                // 英文重复读完后，如果勾选了读中文，则开始读中文
                 if (shouldSpeakTranslation) {
                     synth.speak(transUtterance);
                 }
             }
         };
 
-        // 开始执行发音流程
         if (shouldSpeakWord) {
-            synth.speak(wordUtterance); // 从第一遍英文开始
+            synth.speak(wordUtterance);
         } else if (shouldSpeakTranslation) {
-            synth.speak(transUtterance); // 如果关闭了英文朗读，直接读中文
+            synth.speak(transUtterance);
         }
     }
 
@@ -399,7 +352,7 @@
             currentIndex++;
             updateCard();
         } else {
-            alert('当前混编大词库已全部过完一遍！');
+            alert('全库单词已全部完成一轮背诵！');
             initPlayQueue(); 
         }
     }
@@ -411,18 +364,19 @@
         }
     }
 
-    // 绑定基础事件
     nextBtn.addEventListener('click', nextWord);
     prevBtn.addEventListener('click', prevWord);
 
     showPhoneticCheck.addEventListener('change', () => wordPhonetic.classList.toggle('hidden', !showPhoneticCheck.checked));
     showTranslationCheck.addEventListener('change', () => wordTranslation.classList.toggle('hidden', !showTranslationCheck.checked));
     
-    // 控件状态改变时重新触发朗读
     speakWordCheck.addEventListener('change', updateCard);
     speakTranslationCheck.addEventListener('change', updateCard);
     repeatCountSelect.addEventListener('change', updateCard);
     playModeSelect.addEventListener('change', initPlayQueue);
+
+    // 页面开启时自动运行加载
+    autoLoadCloudVocabulary();
 </script>
 
 </body>
