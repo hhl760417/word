@@ -1,0 +1,59 @@
+name: 自动合并多词库JSON
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js 环境
+        uses: setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 扫描并合并同目录下所有的 JSON 文件
+        run: |
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+          
+          let allWords = [];
+          // 读取根目录下所有文件
+          const files = fs.readdirSync('.');
+          
+          files.forEach(file => {
+            // 过滤掉我们自己生成的合并文件，防止死循环；同时确保只读取以 .json 结尾的文件
+            if (file.endsWith('.json') && file !== 'all_words.json' && file !== 'package.json') {
+              try {
+                const content = JSON.parse(fs.readFileSync(file, 'utf8'));
+                if (Array.isArray(content)) {
+                  allWords = allWords.concat(content);
+                  console.log('成功合并词库文件:', file);
+                }
+              } catch(e) {
+                console.log('跳过无效或非数组JSON文件:', file);
+              }
+            }
+          });
+          
+          fs.writeFileSync('all_words.json', JSON.stringify(allWords, null, 2));
+          console.log('合并完成！总单词量为:', allWords.length);
+          "
+
+      - name: 将合并后的 all_words.json 自动推送到仓库
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add all_words.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 自动合并多词库更新 [skip ci]" && git push)
